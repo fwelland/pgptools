@@ -1,0 +1,33 @@
+plugins {
+    id "java"
+    id "groovy"
+    id "application"
+}
+
+repositories {
+    jcenter()
+}
+
+mainClassName = 'fhw.jpgp'
+
+dependencies{    
+    compile 'org.bouncycastle:bcprov-jdk15on:1.60'    
+    compile 'info.picocli:picocli:3.6.1'
+    compile 'org.bouncycastle:bcpg-jdk15on:1.60'
+}
+
+wrapper{
+    gradleVersion='4.10.2'
+}
+
+run {
+    args = ["--decrypt",
+            "--input-file",
+            "/home/fwelland/OpenPGPTesting/dv-message.txt.gpg",
+            "--secret-key", 
+            "/home/fwelland/OpenPGPTesting/ls-secret-key.pgp",
+            "--output-file", 
+            "/home/fwelland/OpenPGPTesting/decrypted-msg-from-dv.txt",
+            "--passphrase",
+            "skywalker"]
+}
