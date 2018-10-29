@@ -13,12 +13,25 @@ configurations {
     integrationTestRuntime.extendsFrom testRuntime
 }
 
+sourceSets {
+    integrationTest {
+        compileClasspath += test.compileClasspath.filter { !it.getAbsolutePath().contains('resources') }
+        runtimeClasspath += test.compileClasspath + main.resources
+    }
+}
+
 mainClassName = 'fhw.jpgp'
 
 dependencies{    
     compile 'org.bouncycastle:bcprov-jdk15on:1.60'    
     compile 'info.picocli:picocli:3.6.1'
     compile 'org.bouncycastle:bcpg-jdk15on:1.60'
+    
+
+    testCompile'junit:junit:4.12'
+    testCompile'org.spockframework:spock-core:1.1-groovy-2.4'
+    testCompile 'com.blogspot.toomuchcoding:spock-subjects-collaborators-extension:1.2.2'
+
 }
 
 wrapper{
@@ -35,4 +48,10 @@ run {
             "/home/fwelland/OpenPGPTesting/decrypted-msg-from-dv.txt",
             "--passphrase",
             "skywalker"]
+}
+
+
+task integrationTest(type: Test, dependsOn: integrationTestClasses) {
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
 }

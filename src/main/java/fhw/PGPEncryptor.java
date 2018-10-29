@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.NoSuchProviderException;
+import java.security.SecureRandom;
 import java.util.Iterator;
 import org.bouncycastle.bcpg.CompressionAlgorithmTags;
 import org.bouncycastle.openpgp.PGPCompressedDataGenerator;
@@ -18,8 +19,7 @@ import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.PGPUtil;
-import org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator;
-import org.bouncycastle.openpgp.operator.jcajce.JcePGPDataEncryptorBuilder;
+import org.bouncycastle.openpgp.operator.jcajce.*;
 
 public class PGPEncryptor
 {
@@ -27,13 +27,14 @@ public class PGPEncryptor
     private InputStream clearInput;
     private InputStream publicEncryptionKeyStream;
     private byte[] compressedInput; 
+    private Boolean includeIntegrityCheck = false; 
     
     public PGPEncryptor()
     {
 
     }
    
-    protected PGPPublicKey readPublicKey(InputStream input) 
+    protected PGPPublicKey readPublicKey() 
         throws IOException, PGPException
     {
         PGPPublicKeyRingCollection pgpPub = new PGPPublicKeyRingCollection(
@@ -62,7 +63,8 @@ public class PGPEncryptor
         ByteArrayOutputStream squished = new ByteArrayOutputStream();
         PGPCompressedDataGenerator comData = new PGPCompressedDataGenerator(CompressionAlgorithmTags.ZIP);
         OutputStream compressOut = comData.open(squished); 
-        copyInputStreamToOutputStream(clearInput,squished);
+        copyInputStreamToOutputStream(clearInput,compressOut);       
+        compressOut.close();
         squished.close();
         compressedInput  = squished.toByteArray();
     }
@@ -77,47 +79,62 @@ public class PGPEncryptor
             sink.write(buf, 0, n);
         }
     }    
-}
-    
-//    private static void pipeFileContents(File file, OutputStream pOut, byte[] buf)
-//        throws IOException
-//    {
-//        FileInputStream in = new FileInputStream(file);
-//        try
-//        {
-//            int len;
-//            while ((len = in.read(buf)) > 0)
-//            {
-//                pOut.write(buf, 0, len);
-//            }
-//
-//            pOut.close();
-//        }
-//        finally
-//        {
-//            Arrays.fill(buf, (byte)0);
-//            try
-//            {
-//                in.close();
-//            }
-//            catch (IOException ignored)
-//            {
-//                // ignore...
-//            }
-//        }
-//    }    
-       
-//  public void encrypt(
+
+    public OutputStream getCypherOutput()
+    {
+        return cypherOutput;
+    }
+
+    public void setCypherOutput(OutputStream cypherOutput)
+    {
+        this.cypherOutput = cypherOutput;
+    }
+
+    public InputStream getClearInput()
+    {
+        return clearInput;
+    }
+
+    public void setClearInput(InputStream clearInput)
+    {
+        this.clearInput = clearInput;
+    }
+
+    public InputStream getPublicEncryptionKeyStream()
+    {
+        return publicEncryptionKeyStream;
+    }
+
+    public void setPublicEncryptionKeyStream(InputStream publicEncryptionKeyStream)
+    {
+        this.publicEncryptionKeyStream = publicEncryptionKeyStream;
+    }
+
 //        OutputStream    out,
 //        String          fileName,
 //        PGPPublicKey    encKey,
-//        boolean         withIntegrityCheck)
-//        throws IOException, NoSuchProviderException
-//    {
-//        try
-//        {
-//            //byte[] bytes = compressFile(fileName, CompressionAlgorithmTags.ZIP);
-//            compressInputStream();
+//        boolean         withIntegrityCheck            
+    
+    public void encrypt()
+        throws IOException
+    {
+        
+
+
+        compressInputStream();        
+        PGPEncryptedDataGenerator encGen; 
+        encGen = new PGPEncryptedDataGenerator(
+                        new JcePGPDataEncryptorBuilder(PGPEncryptedData.CAST5)
+                            .setWithIntegrityPacket(includeIntegrityCheck)
+                            .setSecureRandom(new SecureRandom()).setProvider("BC")
+        );        
+//        encGen.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(encKey).setProvider("BC"));
+//
+//        OutputStream cOut = encGen.open(out, compressedInput.length);
+//
+//        cOut.write(bytes);
+//        cOut.close();        
+    }
 //
 //            PGPEncryptedDataGenerator encGen = new PGPEncryptedDataGenerator(
 //                new JcePGPDataEncryptorBuilder(PGPEncryptedData.CAST5)
@@ -142,6 +159,7 @@ public class PGPEncryptor
 //    }
 //}
 
+}
 
 
 
