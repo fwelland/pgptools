@@ -8,6 +8,11 @@ repositories {
     jcenter()
 }
 
+configurations {
+    integrationTestCompile.extendsFrom testCompile
+    integrationTestRuntime.extendsFrom testRuntime
+}
+
 mainClassName = 'fhw.jpgp'
 
 dependencies{    
