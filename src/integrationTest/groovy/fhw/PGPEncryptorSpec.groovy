@@ -115,14 +115,14 @@ class PGPEncryptorSpec
     def "spot check encrypt"()
     {
         given:
-            def encryptionKey = getClass().getResource("/ls-public-key.asc")
+            def encryptionKey = getClass().getResource("/LukeSkywalker.public-key.asc")
             def clearText = getClass().getResource("/message-from-dv-to-ls.txt")            
             def pgpe = new PGPEncryptor() 
             def keyInStream = new FileInputStream(new File(encryptionKey.toURI()))
             def clearInStream = new FileInputStream(new File(clearText.toURI()))
             pgpe.publicEncryptionKeyStream = keyInStream
             pgpe.clearInput = clearInStream
-            pgpe.cypherOutput = new FileOutputStream("/tmp/something.gpg")
+            pgpe.cypherOutput = new FileOutputStream("/tmp/EncryptedMessageToLukeSkywalker.gpg")
             
         when: 
             pgpe.encrypt()

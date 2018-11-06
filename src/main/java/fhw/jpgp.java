@@ -3,7 +3,6 @@ package fhw;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.concurrent.Callable;
-import javax.imageio.stream.FileImageInputStream;
 import picocli.*;
 import picocli.CommandLine.*;
 

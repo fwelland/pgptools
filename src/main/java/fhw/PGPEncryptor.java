@@ -25,7 +25,7 @@ public class PGPEncryptor
     private InputStream clearInput;
     private InputStream publicEncryptionKeyStream;
     private byte[] compressedInput; 
-    private Boolean includeIntegrityCheck = false; 
+    private Boolean includeIntegrityCheck = true; 
     
     
     public PGPEncryptor()

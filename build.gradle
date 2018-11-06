@@ -41,11 +41,11 @@ wrapper{
 run {
     args = ["--decrypt",
             "--input-file",
-            "/home/fwelland/OpenPGPTesting/dv-message.txt.gpg",
+            "${projectDir}/src/integrationTest/resources/EncryptedMessageToLukeSkywalker.pgp",
             "--secret-key", 
-            "/home/fwelland/OpenPGPTesting/ls-secret-key.pgp",
+            "${projectDir}/src/integrationTest/resources/LukeSkywalker.private-key.asc",
             "--output-file", 
-            "/home/fwelland/OpenPGPTesting/decrypted-msg-from-dv.txt",
+            "${projectDir}/build/DecryptedMessageToLukeSkywalker.txt",
             "--passphrase",
             "skywalker"]
 }
@@ -54,4 +54,9 @@ run {
 task integrationTest(type: Test, dependsOn: integrationTestClasses) {
     testClassesDirs = sourceSets.integrationTest.output.classesDirs
     classpath = sourceSets.integrationTest.runtimeClasspath
+}
+
+
+task foo{
+    println "${projectDir}/src/integrationTest/"
 }
