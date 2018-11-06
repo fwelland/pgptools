@@ -1,20 +1,18 @@
 package fhw;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.security.NoSuchProviderException;
 import java.security.SecureRandom;
+import java.security.Security;
 import java.util.Iterator;
 import org.bouncycastle.bcpg.CompressionAlgorithmTags;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openpgp.PGPCompressedDataGenerator;
 import org.bouncycastle.openpgp.PGPEncryptedData;
 import org.bouncycastle.openpgp.PGPEncryptedDataGenerator;
 import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPLiteralData;
 import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
@@ -28,6 +26,7 @@ public class PGPEncryptor
     private InputStream publicEncryptionKeyStream;
     private byte[] compressedInput; 
     private Boolean includeIntegrityCheck = false; 
+    
     
     public PGPEncryptor()
     {
@@ -109,18 +108,26 @@ public class PGPEncryptor
     {
         this.publicEncryptionKeyStream = publicEncryptionKeyStream;
     }
-
-//        OutputStream    out,
-//        String          fileName,
-//        PGPPublicKey    encKey,
-//        boolean         withIntegrityCheck            
+    
+    public String get8DigitKeyId(long kid)
+    {
+        String s = Long.toHexString(kid); 
+        s = s.substring(s.length() -8);
+        return(s.toUpperCase());
+    }    
+        
+    protected void derp()
+        throws Exception
+    {
+        PGPPublicKey encryptionKey = readPublicKey();
+        long kid = encryptionKey.getKeyID();
+        System.out.println("this encryption key id:  " + get8DigitKeyId(kid));
+    }
     
     public void encrypt()
-        throws IOException
+        throws Exception
     {
-        
-
-
+        Security.addProvider(new BouncyCastleProvider());        
         compressInputStream();        
         PGPEncryptedDataGenerator encGen; 
         encGen = new PGPEncryptedDataGenerator(
@@ -128,50 +135,16 @@ public class PGPEncryptor
                             .setWithIntegrityPacket(includeIntegrityCheck)
                             .setSecureRandom(new SecureRandom()).setProvider("BC")
         );        
-//        encGen.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(encKey).setProvider("BC"));
-//
-//        OutputStream cOut = encGen.open(out, compressedInput.length);
-//
-//        cOut.write(bytes);
-//        cOut.close();        
+        PGPPublicKey encryptionKey = readPublicKey();
+        encGen.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(encryptionKey).setProvider("BC"));
+        OutputStream cOut = encGen.open(cypherOutput, compressedInput.length);
+        cOut.write(compressedInput);
+        cOut.close();        
     }
-//
-//            PGPEncryptedDataGenerator encGen = new PGPEncryptedDataGenerator(
-//                new JcePGPDataEncryptorBuilder(PGPEncryptedData.CAST5)
-//                        .setWithIntegrityPacket(withIntegrityCheck)
-//                        .setSecureRandom(new SecureRandom()).setProvider("BC"));
-//
-//            encGen.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(encKey).setProvider("BC"));
-//
-//            OutputStream cOut = encGen.open(out, compressedInput.length);
-//
-//            cOut.write(bytes);
-//            cOut.close();
-//        }
-//        catch (PGPException e)
-//        {
-//            System.err.println(e);
-//            if (e.getUnderlyingException() != null)
-//            {
-//                e.getUnderlyingException().printStackTrace();
-//            }
-//        }
-//    }
-//}
+    
+    
+    
+    
+    
 
 }
-
-
-
-//    protected byte[] compressFile(String fileName, int algorithm) 
-//        throws IOException
-//    {
-//        ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-//        PGPCompressedDataGenerator comData = new PGPCompressedDataGenerator(algorithm);
-//        PGPUtil.writeFileToLiteralData(
-//                comData.open(bOut),
-//                PGPLiteralData.BINARY,
-//                new File(fileName));
-//        comData.close();
-//        return bOut.toByteArray();
-//    }    
