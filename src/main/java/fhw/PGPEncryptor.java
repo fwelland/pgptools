@@ -1,22 +1,13 @@
 package fhw;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.security.SecureRandom;
 import java.security.Security;
+import java.util.Date;
 import java.util.Iterator;
 import org.bouncycastle.bcpg.CompressionAlgorithmTags;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.openpgp.PGPCompressedDataGenerator;
-import org.bouncycastle.openpgp.PGPEncryptedData;
-import org.bouncycastle.openpgp.PGPEncryptedDataGenerator;
-import org.bouncycastle.openpgp.PGPException;
-import org.bouncycastle.openpgp.PGPPublicKey;
-import org.bouncycastle.openpgp.PGPPublicKeyRing;
-import org.bouncycastle.openpgp.PGPPublicKeyRingCollection;
-import org.bouncycastle.openpgp.PGPUtil;
+import org.bouncycastle.openpgp.*;
 import org.bouncycastle.openpgp.operator.jcajce.*;
 
 public class PGPEncryptor
@@ -55,19 +46,44 @@ public class PGPEncryptor
         }
         throw new IllegalArgumentException("Can't find encryption key in key ring.");
     }
-            
+                
     protected void compressInputStream()
         throws IOException
     {
         ByteArrayOutputStream squished = new ByteArrayOutputStream();
         PGPCompressedDataGenerator comData = new PGPCompressedDataGenerator(CompressionAlgorithmTags.ZIP);
-        OutputStream compressOut = comData.open(squished); 
-        copyInputStreamToOutputStream(clearInput,compressOut);       
+        OutputStream compressOut = comData.open(squished);         
+        byte[] clearInputAsBytes = clearInputToClearBytes();                         
+        PGPLiteralDataGenerator lData = new PGPLiteralDataGenerator();        
+        OutputStream pOut = lData.open( compressOut,                // the compressed output stream
+                                        PGPLiteralData.BINARY, 
+                                        "fileName",                 // "filename" to store
+                                        clearInputAsBytes.length,   // length of clear data
+                                        new Date());                // current time        
+        ByteArrayInputStream bais = new ByteArrayInputStream(clearInputAsBytes); 
+        copyInputStreamToOutputStream(bais,compressOut);       
         compressOut.close();
         squished.close();
         compressedInput  = squished.toByteArray();
     }
     
+    
+    protected byte[] clearInputToClearBytes()
+        throws IOException
+    {
+        ByteArrayOutputStream os = new ByteArrayOutputStream(); 
+        byte[] buffer = new byte[0xFFFF];
+        for (int len = clearInput.read(buffer); len != -1; len = clearInput.read(buffer))
+        { 
+            os.write(buffer, 0, len);
+        }
+        return os.toByteArray();
+    }
+
+//
+//Say, these 2 are about the same thing....could find way to refactore one 
+//in terms of other. 
+//    
     protected void copyInputStreamToOutputStream(InputStream source, OutputStream sink)
         throws IOException
     {
