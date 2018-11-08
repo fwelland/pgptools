@@ -10,19 +10,23 @@ import picocli.CommandLine.*;
 public class jpgp
     implements Callable<Void> 
 {
+    
+    @Option(names = {"-d", "--decrypt"}, description = "decrypt input file (one of encrypt OR decrypt required)", defaultValue = "true")
+    private boolean doDecrypt; 
+    
+    @Option(names = {"-e", "--encrypt"}, description = "encrypt input file (one of encrypt OR decrypt required)", defaultValue = "false")
+    private boolean doEncrypt;     
+
     @Option(names = {"-i", "--input-file"}, description = "file containing clear or cypher text to operate on", required = true)
     private String inputFile; 
-    
-    @Option(names = {"-d", "--decrypt"}, description = "decrypt input file")
-    private boolean doDecrypt = false; 
-    
-    @Option(names = {"-s", "--secret-key"}, description = "file containing the secret key to use for encrypt/decrypt", required = true)
+        
+    @Option(names = {"-s", "--secret-key"}, description = "file containing the secret key to use for encrypt/decrypt")
     private String secretKeyFile;
     
-    @Option(names = {"-o", "--output-file"}, description = "file to write encrypt/decrypt data to", required = true)
+    @Option(names = {"-o", "--output-file"}, description = "file to write encrypt/decrypt data to")
     private String outputFile;    
     
-    @Option(names = {"-p", "--passphrase"}, description = "secret password or phrase", required = true)
+    @Option(names = {"-p", "--passphrase"}, description = "secret password or phrase")
     private String passPhrase;        
     
     public static void main(String args[])
@@ -34,24 +38,35 @@ public class jpgp
     @Override
     public Void call()
         throws Exception
-    {
-        FileInputStream inStream = new FileInputStream(inputFile); 
-        FileInputStream inSecretKey = new FileInputStream(secretKeyFile);
-        FileOutputStream outStream = new FileOutputStream(outputFile, false);
-        if(doDecrypt)
+    {        
+        if(doDecrypt && doEncrypt)
         {
-            PGPDecryptor pgp = new PGPDecryptor(); 
-            pgp.setClearOutput(outStream);
-            pgp.setCypherInput(inStream);
-            pgp.setPrivateKeyInput(inSecretKey);
-            pgp.setPrivateKeyPassPhrase(passPhrase);
-            pgp.decrypt();
+            throw new IllegalArgumentException("Only ONE of encrypt or decrypt should be specified");
         }
         else
         {
-            System.out.println("I am sorry, I cannot do that. ");
+            if(doDecrypt)
+            {
+                FileInputStream inStream = new FileInputStream(inputFile); 
+                FileInputStream inSecretKey = new FileInputStream(secretKeyFile);
+                FileOutputStream outStream = new FileOutputStream(outputFile, false);                
+                
+                PGPDecryptor pgp = new PGPDecryptor(); 
+                pgp.setClearOutput(outStream);
+                pgp.setCypherInput(inStream);
+                pgp.setPrivateKeyInput(inSecretKey);
+                pgp.setPrivateKeyPassPhrase(passPhrase);
+                pgp.decrypt();
+            }
+            else if(doEncrypt)
+            {
+                System.out.println("encrypt here...");
+            }
+            else
+            {
+                throw new IllegalArgumentException("EITHER encrypt OR decrypt must be specified");
+            }
         }
-
         return((Void)null);
     }        
 }
