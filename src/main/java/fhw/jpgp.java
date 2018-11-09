@@ -1,7 +1,6 @@
 package fhw;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.io.*;
 import java.util.concurrent.Callable;
 import picocli.*;
 import picocli.CommandLine.*;
@@ -11,7 +10,7 @@ public class jpgp
     implements Callable<Void> 
 {
     
-    @Option(names = {"-d", "--decrypt"}, description = "decrypt input file (one of encrypt OR decrypt required)", defaultValue = "true")
+    @Option(names = {"-d", "--decrypt"}, description = "decrypt input file (one of encrypt OR decrypt required)", defaultValue = "false")
     private boolean doDecrypt; 
     
     @Option(names = {"-e", "--encrypt"}, description = "encrypt input file (one of encrypt OR decrypt required)", defaultValue = "false")
@@ -20,8 +19,8 @@ public class jpgp
     @Option(names = {"-i", "--input-file"}, description = "file containing clear or cypher text to operate on", required = true)
     private String inputFile; 
         
-    @Option(names = {"-s", "--secret-key"}, description = "file containing the secret key to use for encrypt/decrypt")
-    private String secretKeyFile;
+    @Option(names = {"-k", "--key"}, description = "file containing the key to use for either encrypt/decrypt", required = true)
+    private String keyFile;
     
     @Option(names = {"-o", "--output-file"}, description = "file to write encrypt/decrypt data to")
     private String outputFile;    
@@ -35,6 +34,10 @@ public class jpgp
         CommandLine.call(new jpgp(), args);
     }
 
+    private FileInputStream inStream; 
+    private FileOutputStream outStream; 
+    private FileInputStream keyInStream; 
+    
     @Override
     public Void call()
         throws Exception
@@ -43,30 +46,49 @@ public class jpgp
         {
             throw new IllegalArgumentException("Only ONE of encrypt or decrypt should be specified");
         }
+        else if(!doDecrypt && !doEncrypt)
+        {   
+            throw new IllegalArgumentException("EITHER encrypt OR decrypt must be specified");            
+        }
         else
         {
+            inStream = new FileInputStream(inputFile); 
+            outStream = new FileOutputStream(outputFile, false);
+            keyInStream = new FileInputStream(keyFile);
+            
             if(doDecrypt)
             {
-                FileInputStream inStream = new FileInputStream(inputFile); 
-                FileInputStream inSecretKey = new FileInputStream(secretKeyFile);
-                FileOutputStream outStream = new FileOutputStream(outputFile, false);                
-                
-                PGPDecryptor pgp = new PGPDecryptor(); 
-                pgp.setClearOutput(outStream);
-                pgp.setCypherInput(inStream);
-                pgp.setPrivateKeyInput(inSecretKey);
-                pgp.setPrivateKeyPassPhrase(passPhrase);
-                pgp.decrypt();
+                decrypt();
             }
             else if(doEncrypt)
             {
-                System.out.println("encrypt here...");
+                encrypt(); 
             }
-            else
-            {
-                throw new IllegalArgumentException("EITHER encrypt OR decrypt must be specified");
-            }
+            inStream.close(); 
+            outStream.close();
+            keyInStream.close();
         }
         return((Void)null);
-    }        
+    }
+    
+    private void decrypt()
+            throws PGPOperationException, IOException
+    {
+        PGPDecryptor pgp = new PGPDecryptor(); 
+        pgp.setClearOutput(outStream);
+        pgp.setCypherInput(inStream);
+        pgp.setPrivateKeyInput(keyInStream);
+        pgp.setPrivateKeyPassPhrase(passPhrase);
+        pgp.decrypt();        
+    }
+    
+    private void encrypt()
+        throws PGPOperationException, IOException            
+    {
+        PGPEncryptor pgp = new PGPEncryptor(); 
+        pgp.setPublicEncryptionKeyStream(keyInStream);
+        pgp.setClearInput(inStream);
+        pgp.setCypherOutput(outStream);        
+        pgp.encrypt();
+    }
 }

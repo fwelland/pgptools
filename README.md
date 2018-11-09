@@ -41,7 +41,7 @@ gpg --encrypt --output EncryptedMessageForUserId.gpg --recipient <userid>  clear
 
 ## Additional Stuff & Features
 
-Add in support to encrypt like: 
+Add in support for signed encryption like: 
 
 ```
 gpg --encrypt --sign --output encrypted-to-recip-userid.pgp --local-user <userid> --recipient <recip-userid> clear-text.txt
@@ -57,7 +57,16 @@ NOTE:   the above, using GP, will verify signature automatically, if the inbound
 
 
 ### CLI (for simple testing)
-<tbd> 
+Some examples of how the test cli works: 
+
+```
+#Simple decrypt
+java -jar build/libs/pgptools-all.jar --decrypt  --input-file src/integrationTest/resources/EncryptedMessageToLukeSkywalker.pgp  --output-file /tmp/message.txt --key src/integrationTest/resources/LukeSkywalker.private-key.asc --passphrase skywalker 
+
+#Simple encrypt
+java -jar build/libs/pgptools-all.jar --encrypt --input-file src/integrationTest/resources/message-from-dv-to-ls.txt  --output-file /tmp/response.pgp --key src/integrationTest/resources/LukeSkywalker.public-key.asc  
+```
+
 
 ### Link for Reference
 

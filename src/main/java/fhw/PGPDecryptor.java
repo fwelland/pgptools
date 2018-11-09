@@ -26,7 +26,7 @@ public class PGPDecryptor
     }
 
     public void decrypt()
-        throws DecryptException, IOException
+        throws PGPOperationException, IOException
     {
         try
         {
@@ -83,32 +83,32 @@ public class PGPDecryptor
             }
             else if (message instanceof PGPOnePassSignatureList)
             {
-                throw new DecryptException("Encrypted message contains a signed message - not literal data.");
+                throw new PGPOperationException("Encrypted message contains a signed message - not literal data.");
             }
             else
             {
-                throw new DecryptException("Message is not a simple encrypted file - type unknown.");
+                throw new PGPOperationException("Message is not a simple encrypted file - type unknown.");
             }
             if (pbe.isIntegrityProtected())
             {
                 if (!pbe.verify())
                 {
-                    throw new DecryptException("Message failed integrity check");
+                    throw new PGPOperationException("Message failed integrity check");
                 }
             }
         }
-        catch(IOException | DecryptException e)
+        catch(IOException | PGPOperationException e)
         {
             throw e; 
         }
         catch(PGPException pgpe)
         {
-            throw new DecryptException(pgpe.getMessage(),pgpe); 
+            throw new PGPOperationException(pgpe.getMessage(),pgpe); 
         }
     }
 
     protected PGPPrivateKey findSecretKey(InputStream keyIn, long keyID, char[] pass)
-        throws IOException, DecryptException
+        throws IOException, PGPOperationException
     {
         try
         {
@@ -129,7 +129,7 @@ public class PGPDecryptor
         }
         catch(PGPException pgpe)
         {
-            throw new DecryptException(pgpe.getMessage(),pgpe);
+            throw new PGPOperationException(pgpe.getMessage(),pgpe);
         }
     }
 

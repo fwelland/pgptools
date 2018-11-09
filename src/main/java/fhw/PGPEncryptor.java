@@ -140,22 +140,29 @@ public class PGPEncryptor
         System.out.println("this encryption key id:  " + get8DigitKeyId(kid));
     }
     
-    public void encrypt()
-        throws Exception
+    public void encrypt() 
+         throws IOException, PGPOperationException
     {
-        Security.addProvider(new BouncyCastleProvider());        
-        compressInputStream();        
-        PGPEncryptedDataGenerator encGen; 
-        encGen = new PGPEncryptedDataGenerator(
-                        new JcePGPDataEncryptorBuilder(PGPEncryptedData.CAST5)
-                            .setWithIntegrityPacket(includeIntegrityCheck)
-                            .setSecureRandom(new SecureRandom()).setProvider("BC")
-        );        
-        PGPPublicKey encryptionKey = readPublicKey();
-        encGen.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(encryptionKey).setProvider("BC"));
-        OutputStream cOut = encGen.open(cypherOutput, compressedInput.length);
-        cOut.write(compressedInput);
-        cOut.close();        
+        try
+        {
+            Security.addProvider(new BouncyCastleProvider());        
+            compressInputStream();        
+            PGPEncryptedDataGenerator encGen; 
+            encGen = new PGPEncryptedDataGenerator(
+                            new JcePGPDataEncryptorBuilder(PGPEncryptedData.CAST5)
+                                .setWithIntegrityPacket(includeIntegrityCheck)
+                                .setSecureRandom(new SecureRandom()).setProvider("BC")
+            );        
+            PGPPublicKey encryptionKey = readPublicKey();
+            encGen.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(encryptionKey).setProvider("BC"));
+            OutputStream cOut = encGen.open(cypherOutput, compressedInput.length);
+            cOut.write(compressedInput);
+            cOut.close();        
+        }
+        catch(PGPException e)
+        {
+            throw new PGPOperationException(e.getMessage(), e); 
+        }
     }
     
     
