@@ -5,20 +5,53 @@ import java.security.SecureRandom;
 import java.security.Security;
 import java.util.Date;
 import java.util.Iterator;
-import org.bouncycastle.bcpg.CompressionAlgorithmTags;
+
+import org.bouncycastle.bcpg.*;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openpgp.*;
+import org.bouncycastle.openpgp.operator.*;
+import org.bouncycastle.openpgp.operator.bc.*;
 import org.bouncycastle.openpgp.operator.jcajce.*;
+import org.bouncycastle.util.test.UncloseableOutputStream;
 
 public class PGPEncryptor
 {
     private OutputStream cypherOutput;
     private InputStream clearInput;
     private InputStream publicEncryptionKeyStream;
-    private byte[] compressedInput; 
-    private Boolean includeIntegrityCheck = true; 
-    
-    
+    private InputStream privateSignatureKeyStream;
+    private String privateKeyPassPhrase;
+
+    public String getPrivateKeyPassPhrase()
+    {
+        return privateKeyPassPhrase;
+    }
+
+    public void setPrivateKeyPassPhrase(String privateKeyPassPhrase)
+    {
+        this.privateKeyPassPhrase = privateKeyPassPhrase;
+    }
+
+
+
+    public InputStream getPrivateSignatureKeyStream()
+    {
+        return privateSignatureKeyStream;
+    }
+
+    public void setPrivateSignatureKeyStream(InputStream privateSignatureKeyStream)
+    {
+        this.privateSignatureKeyStream = privateSignatureKeyStream;
+    }
+
+
+    private byte[] compressedInput;
+    private Boolean includeIntegrityCheck = true;
+
+    private PGPSignatureGenerator signatureGenerator;
+
+
+
     public PGPEncryptor()
     {
 
@@ -27,6 +60,8 @@ public class PGPEncryptor
     protected PGPPublicKey readPublicKey() 
         throws IOException, PGPException
     {
+
+
         PGPPublicKeyRingCollection pgpPub = new PGPPublicKeyRingCollection(
             PGPUtil.getDecoderStream(publicEncryptionKeyStream), 
             new JcaKeyFingerprintCalculator());
@@ -42,14 +77,73 @@ public class PGPEncryptor
                 {
                     return key;
                 }
+
             }
         }
         throw new IllegalArgumentException("Can't find encryption key in key ring.");
     }
-                
-    protected void compressInputStream()
-        throws IOException
+
+    protected PGPPrivateKey readPrivateKey()
+       throws IOException, PGPException
     {
+        PGPSecretKeyRing    sKey = new PGPSecretKeyRing( PGPUtil.getDecoderStream(privateSignatureKeyStream), new BcKeyFingerprintCalculator());
+        return  sKey.getSecretKey().extractPrivateKey(new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase.toCharArray()));
+
+    }
+
+
+    protected void initSignatureGenerator()   throws IOException, PGPException{
+        signatureGenerator = new PGPSignatureGenerator(new BcPGPContentSignerBuilder(PGPPublicKey.DSA, PGPUtil.SHA1));
+        signatureGenerator.init(PGPSignature.BINARY_DOCUMENT, readPrivateKey());
+    }
+
+
+    protected void compressInputStreamWithSignature()
+       throws IOException, PGPException
+    {
+
+        byte[] clearInputAsBytes = clearInputToClearBytes();
+        ByteArrayOutputStream    bOut = new ByteArrayOutputStream();
+        ByteArrayInputStream        testIn = new ByteArrayInputStream(clearInputAsBytes);
+
+        PGPCompressedDataGenerator cGen = new PGPCompressedDataGenerator(
+           PGPCompressedData.ZIP);
+
+        BCPGOutputStream bcOut = new BCPGOutputStream(
+           cGen.open(new UncloseableOutputStream(bOut)));
+
+        initSignatureGenerator();
+        signatureGenerator.generateOnePassVersion(false).encode(bcOut);
+
+        PGPLiteralDataGenerator lGen = new PGPLiteralDataGenerator();
+
+        Date testDate = new Date((System.currentTimeMillis() / 1000) * 1000);
+        OutputStream lOut = lGen.open(
+           new UncloseableOutputStream(bcOut),
+           PGPLiteralData.BINARY,
+           "fileName",
+           clearInputAsBytes.length,
+           testDate);
+
+        int ch;
+        while ((ch = testIn.read()) >= 0)
+        {
+            lOut.write(ch);
+            signatureGenerator.update((byte)ch);
+        }
+        lGen.close();
+        signatureGenerator.generate().encode(bcOut);
+       cGen.close();
+        compressedInput = bOut.toByteArray();
+    }
+
+
+    protected void compressInputStream()
+        throws IOException, PGPException
+    {
+
+
+
         ByteArrayOutputStream squished = new ByteArrayOutputStream();
         PGPCompressedDataGenerator comData = new PGPCompressedDataGenerator(CompressionAlgorithmTags.ZIP);
         OutputStream compressOut = comData.open(squished);         
@@ -146,7 +240,7 @@ public class PGPEncryptor
         try
         {
             Security.addProvider(new BouncyCastleProvider());        
-            compressInputStream();        
+            compressInputStream();
             PGPEncryptedDataGenerator encGen; 
             encGen = new PGPEncryptedDataGenerator(
                             new JcePGPDataEncryptorBuilder(PGPEncryptedData.CAST5)
