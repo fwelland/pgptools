@@ -2,7 +2,8 @@ package fhw;
 
 import java.io.*;
 import java.security.Security;
-import java.util.Iterator;
+import java.util.*;
+
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openpgp.*;
 import org.bouncycastle.openpgp.jcajce.JcaPGPObjectFactory;
@@ -25,55 +26,80 @@ public class PGPDecryptor
 
     }
 
-    public void decrypt()
-        throws PGPOperationException, IOException
+
+
+    public void decrypt() throws PGPOperationException, IOException
     {
+
+        long startTime = System.currentTimeMillis();
         try
         {
-            Security.addProvider(new BouncyCastleProvider());
-            InputStream in = PGPUtil.getDecoderStream(cypherInput);
-            PGPObjectFactory pgpObjFactory = new JcaPGPObjectFactory(in);
-            PGPEncryptedDataList enc;
-            Object o = pgpObjFactory.nextObject();
             //
-            // the first object might be a PGP marker packet.
+            // Read the public key
             //
-            if (o instanceof PGPEncryptedDataList)
+
+            JcaPGPObjectFactory    pgpFact;
+            PGPPublicKeyRing pgpPub = null;
+
+            if(Objects.nonNull(signatureKeyStream))
             {
-                enc = (PGPEncryptedDataList) o;
-            }
-            else
-            {
-                enc = (PGPEncryptedDataList) pgpObjFactory.nextObject();
-            }
-            //
-            // find the secret key
-            //
-            Iterator<PGPPublicKeyEncryptedData> it = enc.getEncryptedDataObjects();
-            PGPPublicKeyEncryptedData pbe = null;
-            PGPPrivateKey sKey = null;
-            while (sKey == null && it.hasNext())
-            {
-                pbe = it.next();
-                sKey = findSecretKey(privateKeyInput, pbe.getKeyID(), privateKeyPassPhrase.toCharArray());
-            }
-            if (sKey == null)
-            {
-                throw new IllegalArgumentException("Secret key for message not found.");
-            }
-            InputStream clear = pbe.getDataStream(new BcPublicKeyDataDecryptorFactory(sKey));
-            PGPObjectFactory plainFact = new JcaPGPObjectFactory(clear);
-            Object message = plainFact.nextObject();
-            if (message instanceof PGPCompressedData)
-            {
-                PGPCompressedData cData = (PGPCompressedData) message;
-                PGPObjectFactory pgpFact = new JcaPGPObjectFactory(cData.getDataStream());
-                message = pgpFact.nextObject();
+                pgpFact = new JcaPGPObjectFactory(PGPUtil.getDecoderStream(
+                   signatureKeyStream));
+                 pgpPub = (PGPPublicKeyRing) pgpFact.nextObject();
             }
 
-            if (message instanceof PGPLiteralData)
+            PGPSecretKeyRing    sKey = new PGPSecretKeyRing(PGPUtil.getDecoderStream(privateKeyInput), new BcKeyFingerprintCalculator());
+            PGPPrivateKey        pgpPrivKey = sKey.getSecretKey().extractPrivateKey(new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase.toCharArray()));
+
+
+            //
+            // signed and encrypted message
+            //
+            JcaPGPObjectFactory pgpF = new JcaPGPObjectFactory(cypherInput);
+
+            PGPEncryptedDataList encList = (PGPEncryptedDataList)pgpF.nextObject();
+
+            PGPPublicKeyEncryptedData encP = (PGPPublicKeyEncryptedData)encList.get(0);
+
+            InputStream clear = encP.getDataStream(new BcPublicKeyDataDecryptorFactory(pgpPrivKey));
+
+            pgpFact = new JcaPGPObjectFactory(clear);
+
+            Object pgpObject = pgpFact.nextObject();
+            if(pgpObject instanceof PGPCompressedData)
             {
-                PGPLiteralData ld = (PGPLiteralData) message;
+                PGPCompressedData c1 = (PGPCompressedData) pgpObject;
+                pgpFact = new JcaPGPObjectFactory(c1.getDataStream());
+                pgpObject = pgpFact.nextObject();
+
+            }
+            if(pgpObject instanceof PGPOnePassSignatureList)
+            {
+                PGPOnePassSignatureList p1 = (PGPOnePassSignatureList)pgpObject;
+                PGPOnePassSignature ops = p1.get(0);
+
+                PGPLiteralData ld = (PGPLiteralData) pgpFact.nextObject();
+
+                //ByteArrayOutputStream bOut = new ByteArrayOutputStream();
+
+                InputStream inLd = ld.getDataStream();
+                ops.init(
+                   new BcPGPContentVerifierBuilderProvider(),
+                   pgpPub.getPublicKey());
+                int ch;
+
+                while ((ch = inLd.read()) >= 0)
+                {
+                    ops.update((byte) ch);
+                    getClearOutput().write(ch);
+                }
+
+                PGPSignatureList p3 = (PGPSignatureList) pgpFact.nextObject();
+                System.out.println("VERIFIED==========" + ops.verify(p3.get(0)));
+            }
+            else if(pgpObject instanceof PGPLiteralData)
+            {
+                PGPLiteralData ld = (PGPLiteralData) pgpObject;
                 InputStream unc = ld.getInputStream();
                 int ch;
                 while ((ch = unc.read()) >= 0)
@@ -81,138 +107,9 @@ public class PGPDecryptor
                     getClearOutput().write(ch);
                 }
             }
-            else if (message instanceof PGPOnePassSignatureList)
-            {
-                throw new PGPOperationException("Encrypted message contains a signed message - not literal data.");
-            }
-            else
-            {
-                throw new PGPOperationException("Message is not a simple encrypted file - type unknown.");
-            }
-            if (pbe.isIntegrityProtected())
-            {
-                if (!pbe.verify())
-                {
-                    throw new PGPOperationException("Message failed integrity check");
-                }
-            }
-        }
-        catch(IOException | PGPOperationException e)
-        {
-            throw e; 
-        }
-        catch(PGPException pgpe)
-        {
-            throw new PGPOperationException(pgpe.getMessage(),pgpe); 
-        }
-    }
-
-
-
-
-    protected PGPPublicKey readSignatureKey()
-       throws IOException, PGPException
-    {
-        PGPPublicKeyRingCollection pgpPub = new PGPPublicKeyRingCollection(
-           PGPUtil.getDecoderStream(signatureKeyStream),
-           new JcaKeyFingerprintCalculator());
-        Iterator keyRingIter = pgpPub.getKeyRings();
-        while (keyRingIter.hasNext())
-        {
-            PGPPublicKeyRing keyRing = (PGPPublicKeyRing)keyRingIter.next();
-            Iterator keyIter = keyRing.getPublicKeys();
-            while (keyIter.hasNext())
-            {
-                PGPPublicKey key = (PGPPublicKey)keyIter.next();
-                if (key.isEncryptionKey())
-                {
-                    return key;
-                }
-            }
-        }
-        throw new IllegalArgumentException("Can't find encryption key in key ring.");
-    }
-
-    public void verifySignedEncryptedObject() throws PGPOperationException, IOException
-    {
-
-        try
-        {
-          //  Security.addProvider(new BouncyCastleProvider());
-            InputStream in = PGPUtil.getDecoderStream(cypherInput);
-
-            PGPObjectFactory pgpObjFactory = new JcaPGPObjectFactory(in);
-            PGPEncryptedDataList enc;
-            Object o = pgpObjFactory.nextObject();
-            //
-            // the first object might be a PGP marker packet.
-            //
-            if (o instanceof PGPEncryptedDataList)
-            {
-                enc = (PGPEncryptedDataList) o;
-            }
-            else
-            {
-                enc = (PGPEncryptedDataList) pgpObjFactory.nextObject();
-            }
-            //
-            // find the secret key
-            //
-            PGPPublicKeyEncryptedData encData = (PGPPublicKeyEncryptedData)enc.get(0);
-
-            System.out.println("VVVID="+ encData.getKeyID());
-
-            PGPPrivateKey sKey = findSecretKey(privateKeyInput, encData.getKeyID(), privateKeyPassPhrase.toCharArray());
-
-            System.out.println("SKEY="+ sKey);
-
-//            PublicKeyDataDecryptorFactory dataDecryptorFactory = new JcePublicKeyDataDecryptorFactoryBuilder().setProvider("BC").build(sKey);
-
-            InputStream clear = encData.getDataStream(new BcPublicKeyDataDecryptorFactory(sKey));
-            System.out.println("CL="+ clear);
-
-            PGPObjectFactory plainFact = new JcaPGPObjectFactory(clear);
-            Object message = plainFact.nextObject();
-
-
-            System.out.println("DF="+ message.getClass());
-
-            if (message instanceof PGPCompressedData)
-            {
-                PGPCompressedData cData = (PGPCompressedData) message;
-                PGPObjectFactory pgpFact = new JcaPGPObjectFactory(cData.getDataStream());
-                message = pgpFact.nextObject();
-
-                System.out.println("DF=2222"+ message.getClass());
-
-
-            }
-
-            if (message instanceof PGPLiteralData)
-            {
-                PGPLiteralData ld = (PGPLiteralData) message;
-                InputStream unc = ld.getInputStream();
-                byte[] signedData = Streams.readAll(unc);
-
-                if (encData.verify())
-                {
-                    System.out.println("VVVVVVVVVV="+ verifySignedObject(readSignatureKey(), signedData));
-                }
-//                int ch;
-//                while ((ch = unc.read()) >= 0)
-//                {
-//                    getClearOutput().write(ch);
-//                }
-            }
-//
-//            InputStream clear = encData.getDataStream(dataDecryptorFactory);
-
-
-
-
 
         }
-        catch(IOException | PGPOperationException e)
+        catch(IOException e)
         {
             throw e;
         }
@@ -220,64 +117,27 @@ public class PGPDecryptor
         {
             throw new PGPOperationException(pgpe.getMessage(),pgpe);
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    }
-
-    protected  boolean verifySignedObject(PGPPublicKey verifyingKey, byte[] pgpSignedData)
-       throws PGPException, IOException
-    {
-        JcaPGPObjectFactory        pgpFact = new JcaPGPObjectFactory(pgpSignedData);
-
-        PGPOnePassSignatureList onePassList = (PGPOnePassSignatureList)pgpFact.nextObject();
-        PGPOnePassSignature ops = onePassList.get(0);
-
-        PGPLiteralData literalData = (PGPLiteralData)pgpFact.nextObject();
-
-        InputStream dIn = literalData.getInputStream();
-
-        ops.init(new JcaPGPContentVerifierBuilderProvider().setProvider(new BouncyCastleProvider()), verifyingKey);
-
-        int ch;
-        while ((ch = dIn.read()) >= 0)
+        finally
         {
-            ops.update((byte)ch);
+            System.out.println(String.format("Time =%d s",
+               (System.currentTimeMillis() - startTime) / 1000));
         }
-
-        PGPSignatureList sigList = (PGPSignatureList)pgpFact.nextObject();
-        PGPSignature sig = sigList.get(0);
-
-        return ops.verify(sig);
     }
 
-    private byte[] getBytesFromInputStream(InputStream is) throws IOException {
-        ByteArrayOutputStream os = new ByteArrayOutputStream();
-        byte[] buffer = new byte[0xFFFF];
-        for (int len = is.read(buffer); len != -1; len = is.read(buffer)) {
-            os.write(buffer, 0, len);
-        }
-        return os.toByteArray();
+
+
+    protected PGPPrivateKey readPrivateKey(InputStream privateSignatureKeyStream,  char[] privateKeyPassPhrase)
+       throws IOException, PGPException
+    {
+        PGPSecretKeyRing    sKey = new PGPSecretKeyRing( PGPUtil.getDecoderStream(privateSignatureKeyStream), new BcKeyFingerprintCalculator());
+        PGPSecretKey pgpSecKey = sKey.getSecretKey();
+        PBESecretKeyDecryptor decryptor = new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase);
+        PGPPrivateKey pk = pgpSecKey.extractPrivateKey(decryptor);
+        return  pk;
     }
+
+
+
 
     protected PGPPrivateKey findSecretKey(InputStream keyIn, long keyID, char[] pass)
         throws IOException, PGPOperationException

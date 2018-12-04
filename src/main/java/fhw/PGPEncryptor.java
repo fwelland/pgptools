@@ -86,55 +86,81 @@ public class PGPEncryptor
     protected PGPPrivateKey readPrivateKey()
        throws IOException, PGPException
     {
+        System.out.println("PRIVATE KEY======================="+privateSignatureKeyStream.available());
         PGPSecretKeyRing    sKey = new PGPSecretKeyRing( PGPUtil.getDecoderStream(privateSignatureKeyStream), new BcKeyFingerprintCalculator());
-        return  sKey.getSecretKey().extractPrivateKey(new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase.toCharArray()));
+        System.out.println("SECRET KEY======ring================="+sKey);
+        PGPSecretKey pgpSecKey = sKey.getSecretKey();
+
+        System.out.println("SECRET KEY======================="+pgpSecKey);
+
+        PBESecretKeyDecryptor decryptor = new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase.toCharArray());
+
+        System.out.println("DECRYPTOR======================="+decryptor);
+
+        PGPPrivateKey pk = pgpSecKey.extractPrivateKey(decryptor);
+
+
+        //PGPPrivateKey pk = sKey.getSecretKey().extractPrivateKey(new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase.toCharArray()));
+
+        System.out.println("PK======================"+pk);
+
+        return  pk;
 
     }
 
 
     protected void initSignatureGenerator()   throws IOException, PGPException{
-        signatureGenerator = new PGPSignatureGenerator(new BcPGPContentSignerBuilder(PGPPublicKey.DSA, PGPUtil.SHA1));
+        signatureGenerator = new PGPSignatureGenerator(new BcPGPContentSignerBuilder(PGPPublicKey.RSA_GENERAL, PGPUtil.SHA1));
         signatureGenerator.init(PGPSignature.BINARY_DOCUMENT, readPrivateKey());
     }
-
 
     protected void compressInputStreamWithSignature()
        throws IOException, PGPException
     {
 
         byte[] clearInputAsBytes = clearInputToClearBytes();
-        ByteArrayOutputStream    bOut = new ByteArrayOutputStream();
-        ByteArrayInputStream        testIn = new ByteArrayInputStream(clearInputAsBytes);
+        ByteArrayOutputStream bOut = new ByteArrayOutputStream();
 
         PGPCompressedDataGenerator cGen = new PGPCompressedDataGenerator(
            PGPCompressedData.ZIP);
-
-        BCPGOutputStream bcOut = new BCPGOutputStream(
-           cGen.open(new UncloseableOutputStream(bOut)));
-
-        initSignatureGenerator();
-        signatureGenerator.generateOnePassVersion(false).encode(bcOut);
-
-        PGPLiteralDataGenerator lGen = new PGPLiteralDataGenerator();
-
-        Date testDate = new Date((System.currentTimeMillis() / 1000) * 1000);
-        OutputStream lOut = lGen.open(
-           new UncloseableOutputStream(bcOut),
-           PGPLiteralData.BINARY,
-           "fileName",
-           clearInputAsBytes.length,
-           testDate);
-
-        int ch;
-        while ((ch = testIn.read()) >= 0)
+        try (
+           BCPGOutputStream bcOut = new BCPGOutputStream(
+              cGen.open(new UncloseableOutputStream(bOut)))
+        )
         {
-            lOut.write(ch);
-            signatureGenerator.update((byte)ch);
+
+            initSignatureGenerator();
+            signatureGenerator.generateOnePassVersion(false).encode(bcOut);
+
+            PGPLiteralDataGenerator lGen = new PGPLiteralDataGenerator();
+
+            Date testDate = new Date((System.currentTimeMillis() / 1000)
+               * 1000);
+            try (
+               OutputStream lOut = lGen.open(
+                  new UncloseableOutputStream(bcOut),
+                  PGPLiteralData.BINARY,
+                  "_CONSOLE",
+                  clearInputAsBytes.length,
+                  testDate))
+            {
+
+                ByteArrayInputStream testIn = new ByteArrayInputStream(
+                   clearInputAsBytes);
+
+                int ch;
+                while ((ch = testIn.read()) >= 0)
+                {
+                    lOut.write(ch);
+                    signatureGenerator.update((byte) ch);
+                }
+                lGen.close();
+                signatureGenerator.generate().encode(bcOut);
+                cGen.close();
+
+                compressedInput = bOut.toByteArray();
+            }
         }
-        lGen.close();
-        signatureGenerator.generate().encode(bcOut);
-       cGen.close();
-        compressedInput = bOut.toByteArray();
     }
 
 
@@ -147,13 +173,14 @@ public class PGPEncryptor
         ByteArrayOutputStream squished = new ByteArrayOutputStream();
         PGPCompressedDataGenerator comData = new PGPCompressedDataGenerator(CompressionAlgorithmTags.ZIP);
         OutputStream compressOut = comData.open(squished);         
-        byte[] clearInputAsBytes = clearInputToClearBytes();                         
+        byte[] clearInputAsBytes = clearInputToClearBytes();
+
         PGPLiteralDataGenerator lData = new PGPLiteralDataGenerator();        
         OutputStream pOut = lData.open( compressOut,                // the compressed output stream
-                                        PGPLiteralData.BINARY, 
+                                        PGPLiteralData.BINARY,
                                         "fileName",                 // "filename" to store
                                         clearInputAsBytes.length,   // length of clear data
-                                        new Date());                // current time        
+                                        new Date());                // current time
         ByteArrayInputStream bais = new ByteArrayInputStream(clearInputAsBytes); 
         copyInputStreamToOutputStream(bais,compressOut);       
         compressOut.close();
@@ -239,7 +266,7 @@ public class PGPEncryptor
     {
         try
         {
-            Security.addProvider(new BouncyCastleProvider());        
+            Security.addProvider(new BouncyCastleProvider());
             compressInputStream();
             PGPEncryptedDataGenerator encGen; 
             encGen = new PGPEncryptedDataGenerator(
@@ -258,10 +285,40 @@ public class PGPEncryptor
             throw new PGPOperationException(e.getMessage(), e); 
         }
     }
-    
-    
-    
-    
+
+
+
+    public void encryptAndSign()
+       throws IOException, PGPOperationException
+    {
+        long startTime = System.currentTimeMillis();
+        try
+        {
+            Security.addProvider(new BouncyCastleProvider());
+            compressInputStreamWithSignature();
+            PGPEncryptedDataGenerator encGen;
+            encGen = new PGPEncryptedDataGenerator(
+               new JcePGPDataEncryptorBuilder(PGPEncryptedData.CAST5)
+                  .setWithIntegrityPacket(includeIntegrityCheck)
+                  .setSecureRandom(new SecureRandom()).setProvider("BC")
+            );
+            PGPPublicKey encryptionKey = readPublicKey();
+            encGen.addMethod(new JcePublicKeyKeyEncryptionMethodGenerator(encryptionKey).setProvider("BC"));
+            OutputStream cOut = encGen.open(cypherOutput, compressedInput.length);
+            cOut.write(compressedInput);
+            cOut.close();
+
+        }
+        catch(PGPException e)
+        {
+            throw new PGPOperationException(e.getMessage(), e);
+        }
+        finally
+        {
+            System.out.println(String.format("Time =%d s",(System.currentTimeMillis()-startTime)/1000));
+
+        }
+    }
     
 
 }

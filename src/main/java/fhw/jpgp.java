@@ -13,8 +13,7 @@ public class jpgp
     implements Callable<Void> 
 {
 
-    @Option(names = {"-v", "--verify"}, description = "verify file signed encrypted file)", defaultValue = "false")
-    private boolean doVerify;
+
 
     @Option(names = {"-d", "--decrypt"}, description = "decrypt input file (one of encrypt OR decrypt required)", defaultValue = "false")
     private boolean doDecrypt; 
@@ -56,8 +55,8 @@ public class jpgp
         {
             throw new IllegalArgumentException("Only ONE of encrypt or decrypt should be specified");
         }
-        else if(!doDecrypt && !doEncrypt && !doVerify )
-        {   
+        else if(!doDecrypt && !doEncrypt)
+        {
             throw new IllegalArgumentException("EITHER encrypt OR decrypt OR verify must be specified");
         }
         else
@@ -76,13 +75,15 @@ public class jpgp
             }
             else if(doEncrypt)
             {
-                encrypt(); 
+                if(Objects.nonNull(signatureKeyStream)){
+                    encryptAndSign();
+                }
+                else
+                {
+                    encrypt();
+                }
             }
-            else if(doVerify)
-            {
-                verify();
-            }
-            inStream.close(); 
+            inStream.close();
             outStream.close();
             keyInStream.close();
             if(Objects.nonNull(signatureFile))
@@ -102,21 +103,9 @@ public class jpgp
         pgp.setCypherInput(inStream);
         pgp.setPrivateKeyInput(keyInStream);
         pgp.setPrivateKeyPassPhrase(passPhrase);
-        pgp.decrypt();        
-    }
-
-    private void verify()
-       throws PGPOperationException, IOException
-    {
-        PGPDecryptor pgp = new PGPDecryptor();
-        pgp.setClearOutput(outStream);
-        pgp.setCypherInput(inStream);
-        pgp.setPrivateKeyInput(keyInStream);
-        pgp.setPrivateKeyPassPhrase(passPhrase);
         pgp.setSignatureKeyStream(signatureKeyStream);
-        pgp.verifySignedEncryptedObject();
+        pgp.decrypt();
     }
-
 
     private void encrypt()
         throws PGPOperationException, IOException            
@@ -125,10 +114,21 @@ public class jpgp
         pgp.setPublicEncryptionKeyStream(keyInStream);
         pgp.setClearInput(inStream);
         pgp.setCypherOutput(outStream);
-        pgp.setPrivateKeyPassPhrase(passPhrase);
-        pgp.setPrivateSignatureKeyStream(signatureKeyStream);
-
-
+//        pgp.setPrivateKeyPassPhrase(passPhrase);
+//        pgp.setPrivateSignatureKeyStream(signatureKeyStream);
         pgp.encrypt();
     }
+
+    private void encryptAndSign()
+       throws PGPOperationException, IOException
+    {
+        PGPEncryptor pgp = new PGPEncryptor();
+        pgp.setPublicEncryptionKeyStream(keyInStream);
+        pgp.setClearInput(inStream);
+        pgp.setCypherOutput(outStream);
+        pgp.setPrivateKeyPassPhrase(passPhrase);
+        pgp.setPrivateSignatureKeyStream(signatureKeyStream);
+        pgp.encryptAndSign();
+    }
+
 }
