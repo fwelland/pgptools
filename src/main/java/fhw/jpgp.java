@@ -75,13 +75,7 @@ public class jpgp
             }
             else if(doEncrypt)
             {
-                if(Objects.nonNull(signatureKeyStream)){
-                    encryptAndSign();
-                }
-                else
-                {
-                    encrypt();
-                }
+                 encrypt();
             }
             inStream.close();
             outStream.close();
@@ -114,21 +108,10 @@ public class jpgp
         pgp.setPublicEncryptionKeyStream(keyInStream);
         pgp.setClearInput(inStream);
         pgp.setCypherOutput(outStream);
-//        pgp.setPrivateKeyPassPhrase(passPhrase);
-//        pgp.setPrivateSignatureKeyStream(signatureKeyStream);
+        pgp.setPrivateKeyPassPhrase(passPhrase);
+        pgp.setPrivateSignatureKeyStream(signatureKeyStream);
         pgp.encrypt();
     }
 
-    private void encryptAndSign()
-       throws PGPOperationException, IOException
-    {
-        PGPEncryptor pgp = new PGPEncryptor();
-        pgp.setPublicEncryptionKeyStream(keyInStream);
-        pgp.setClearInput(inStream);
-        pgp.setCypherOutput(outStream);
-        pgp.setPrivateKeyPassPhrase(passPhrase);
-        pgp.setPrivateSignatureKeyStream(signatureKeyStream);
-        pgp.encryptAndSign();
-    }
 
 }
