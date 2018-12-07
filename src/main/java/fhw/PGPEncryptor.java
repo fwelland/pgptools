@@ -103,7 +103,7 @@ public class PGPEncryptor
        throws IOException, PGPException
     {
 
-        byte[] clearInputAsBytes = clearInputToClearBytes();
+       // byte[] clearInputAsBytes = clearInputToClearBytes();
         ByteArrayOutputStream bOut = new ByteArrayOutputStream();
 
         PGPCompressedDataGenerator cGen = new PGPCompressedDataGenerator(
@@ -126,15 +126,16 @@ public class PGPEncryptor
                   new UncloseableOutputStream(bcOut),
                   PGPLiteralData.BINARY,
                   "_CONSOLE",
-                  clearInputAsBytes.length,
+                  clearInput.available(),
+                  //clearInputAsBytes.length,
                   testDate))
             {
 
-                ByteArrayInputStream testIn = new ByteArrayInputStream(
-                   clearInputAsBytes);
+//                ByteArrayInputStream testIn = new ByteArrayInputStream(
+//                   clearInputAsBytes);
 
                 int ch;
-                while ((ch = testIn.read()) >= 0)
+                while ((ch = clearInput.read()) >= 0)
                 {
                     lOut.write(ch);
                     signatureGenerator.update((byte) ch);
@@ -255,6 +256,7 @@ public class PGPEncryptor
     public void encrypt() 
          throws IOException, PGPOperationException
     {
+        long start = System.currentTimeMillis();
         try
         {
             Security.addProvider(new BouncyCastleProvider());
@@ -281,6 +283,10 @@ public class PGPEncryptor
         catch(PGPException e)
         {
             throw new PGPOperationException(e.getMessage(), e); 
+        }
+        finally
+        {
+            System.out.println(String.format("Encryption duration is %d s",(System.currentTimeMillis()-start)/1000));
         }
     }
 
