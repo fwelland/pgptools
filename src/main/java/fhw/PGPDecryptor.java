@@ -1,15 +1,10 @@
 package fhw;
 
 import java.io.*;
-import java.security.Security;
 import java.util.*;
-
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openpgp.*;
 import org.bouncycastle.openpgp.jcajce.JcaPGPObjectFactory;
-import org.bouncycastle.openpgp.operator.*;
 import org.bouncycastle.openpgp.operator.bc.*;
-import org.bouncycastle.openpgp.operator.jcajce.*;
 import org.bouncycastle.util.io.Streams;
 
 public class PGPDecryptor
@@ -26,8 +21,6 @@ public class PGPDecryptor
 
     }
 
-
-
     public void decrypt() throws PGPOperationException, IOException
     {
 
@@ -39,18 +32,15 @@ public class PGPDecryptor
             //
 
             JcaPGPObjectFactory    pgpFact;
-            PGPPublicKeyRing pgpPub = null;
+            PGPPublicKey pgpPubKey = null;
 
             if(Objects.nonNull(signatureKeyStream))
             {
-                pgpFact = new JcaPGPObjectFactory(PGPUtil.getDecoderStream(
-                   signatureKeyStream));
-                 pgpPub = (PGPPublicKeyRing) pgpFact.nextObject();
+
+                pgpPubKey = PGPKeyUtil.readPublicKey(signatureKeyStream);
             }
 
-            PGPSecretKeyRing    sKey = new PGPSecretKeyRing(PGPUtil.getDecoderStream(privateKeyInput), new BcKeyFingerprintCalculator());
-            PGPPrivateKey        pgpPrivKey = sKey.getSecretKey().extractPrivateKey(new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase.toCharArray()));
-
+            PGPPrivateKey        pgpPrivKey =  PGPKeyUtil.readPrivateKey(privateKeyInput, privateKeyPassPhrase);
 
             //
             // signed and encrypted message
@@ -80,18 +70,16 @@ public class PGPDecryptor
 
                 PGPLiteralData ld = (PGPLiteralData) pgpFact.nextObject();
 
-                //ByteArrayOutputStream bOut = new ByteArrayOutputStream();
-
                 InputStream inLd = ld.getDataStream();
                 ops.init(
                    new BcPGPContentVerifierBuilderProvider(),
-                   pgpPub.getPublicKey());
+                   pgpPubKey);
                 int ch;
-
-                while ((ch = inLd.read()) >= 0)
+                byte[] buf = new byte[1 << 16];
+                while ((ch = inLd.read(buf)) > 0)
                 {
-                    ops.update((byte) ch);
-                    getClearOutput().write(ch);
+                    ops.update(buf,0, ch);
+                    getClearOutput().write(buf,0, ch);
                 }
 
                 PGPSignatureList p3 = (PGPSignatureList) pgpFact.nextObject();
@@ -101,11 +89,8 @@ public class PGPDecryptor
             {
                 PGPLiteralData ld = (PGPLiteralData) pgpObject;
                 InputStream unc = ld.getInputStream();
-                int ch;
-                while ((ch = unc.read()) >= 0)
-                {
-                    getClearOutput().write(ch);
-                }
+                Streams.pipeAll(unc,  getClearOutput());
+
             }
 
         }
@@ -124,52 +109,6 @@ public class PGPDecryptor
         }
     }
 
-
-
-    protected PGPPrivateKey readPrivateKey(InputStream privateSignatureKeyStream,  char[] privateKeyPassPhrase)
-       throws IOException, PGPException
-    {
-        PGPSecretKeyRing    sKey = new PGPSecretKeyRing( PGPUtil.getDecoderStream(privateSignatureKeyStream), new BcKeyFingerprintCalculator());
-        PGPSecretKey pgpSecKey = sKey.getSecretKey();
-        PBESecretKeyDecryptor decryptor = new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(privateKeyPassPhrase);
-        PGPPrivateKey pk = pgpSecKey.extractPrivateKey(decryptor);
-        return  pk;
-    }
-
-
-
-
-    protected PGPPrivateKey findSecretKey(InputStream keyIn, long keyID, char[] pass)
-        throws IOException, PGPOperationException
-    {
-        try
-        {
-            KeyFingerPrintCalculator calculator = new JcaKeyFingerprintCalculator();
-            PGPSecretKeyRingCollection pgpSec = new PGPSecretKeyRingCollection(PGPUtil.getDecoderStream(keyIn), calculator);
-            PGPSecretKey pgpSecKey = pgpSec.getSecretKey(keyID);
-            PGPPrivateKey pk = null; 
-            if (pgpSecKey != null)
-            {
-                PBESecretKeyDecryptor decryptor = new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(pass);
-                pk = pgpSecKey.extractPrivateKey(decryptor);            
-            }
-            return(pk);
-        }
-        catch(IOException ioe)
-        {
-            throw ioe; 
-        }
-        catch(PGPException pgpe)
-        {
-            throw new PGPOperationException(pgpe.getMessage(),pgpe);
-        }
-    }
-
-    public InputStream getCypherInput()
-    {
-        return cypherInput;
-    }
-
     public void setCypherInput(InputStream cypherInput)
     {
         this.cypherInput = cypherInput;
@@ -185,19 +124,10 @@ public class PGPDecryptor
         this.clearOutput = clearOutput;
     }
 
-    public InputStream getPrivateKeyInput()
-    {
-        return privateKeyInput;
-    }
 
     public void setPrivateKeyInput(InputStream privateKeyInput)
     {
         this.privateKeyInput = privateKeyInput;
-    }
-
-    public String getPrivateKeyPassPhrase()
-    {
-        return privateKeyPassPhrase;
     }
 
     public void setPrivateKeyPassPhrase(String privateKeyPassPhrase)
@@ -205,10 +135,6 @@ public class PGPDecryptor
         this.privateKeyPassPhrase = privateKeyPassPhrase;
     }
 
-    public InputStream getSignatureKeyStream()
-    {
-        return signatureKeyStream;
-    }
 
     public void setSignatureKeyStream(InputStream signatureKeyStream)
     {
