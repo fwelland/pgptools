@@ -1,10 +1,9 @@
 package fhw;
 
 import java.io.*;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.Callable;
 
-import org.bouncycastle.openpgp.PGPException;
 import picocli.*;
 import picocli.CommandLine.*;
 
@@ -112,6 +111,5 @@ public class jpgp
         pgp.setPrivateSignatureKeyStream(signatureKeyStream);
         pgp.encrypt();
     }
-
-
 }
+
